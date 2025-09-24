@@ -1,3 +1,6 @@
+# Docling Folder Converter
+# A GUI tool to convert all documents in a folder to Markdown using Docling.
+# Andy Mercado, 9/24/2025
 
 import os
 from pathlib import Path
@@ -13,6 +16,8 @@ def convert_folder(input_folder, output_folder, progress_bar, status_label):
     for root, _, files in os.walk(input_folder):
         for filename in files:
             all_files.append(Path(root) / filename)
+    
+    print("Total files found:", len(all_files))
 
     total_files = len(all_files)
     if total_files == 0:

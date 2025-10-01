@@ -1,6 +1,6 @@
 # Docling Folder Converter
 # A GUI tool to convert all documents in a folder to Markdown using Docling.
-# Now includes text cleaning after conversion.
+# Cleaning after conversion to remove unwanted sections. Making DOCX weekly reports LLM-Ready
 # Andy Mercado, 9/24/2025
 
 import os
@@ -14,16 +14,16 @@ from docling.document_converter import DocumentConverter
 # ---------- Text Cleaning ----------
 def cut_intro_sections(text: str) -> str:
     """
-    1) Cut everything before the first real bold section header (**Name:**) that is NOT
+    1) Cut everything before the first real bold section header (**Name**) that is NOT
        'To', 'From', 'Date', or 'Subject'.
-    2) Remove unwanted blocks (Personnel, Meetings, Safety, Kudos, Training, Standby).
+    2) Remove unwanted blocks (Personnel, Meetings, Safety, Kudos, Training, Goals, Standby).
     """
-    # Normalize newlines (helps with CRLF)
+    # Normalize newlines
     t = text.replace("\r\n", "\n").replace("\r", "\n")
 
-    # --- STEP 1: find first real section header (**Something:**) not in memo fields ---
+    # --- STEP 1: find first real section header ---
     memo = {"to", "from", "date", "subject"}
-    header_pat = re.compile(r"\*\*\s*([^\n*]+?)\s*:\s*\*\*", re.IGNORECASE)
+    header_pat = re.compile(r"\*\*\s*([^\n*]+?)\s*:?\s*\*\*", re.IGNORECASE)
 
     first_real_start = None
     for m in header_pat.finditer(t):
@@ -35,19 +35,21 @@ def cut_intro_sections(text: str) -> str:
     if first_real_start is not None:
         t = t[first_real_start:].lstrip()
 
-    # --- STEP 2: remove unwanted sections (normalize headers before matching) ---
-    unwanted = {
+    # --- STEP 2: remove unwanted sections ---
+    unwanted_keywords = [
         "weekly personnel",
-        "meetings",
-        "meetings and training",
+        "personnel",
+        "meeting",
         "training",
-        "training/webinars",
         "safety",
-        "safety and compliance",
+        "compliance",
         "kudos",
-        "webinars",
-        "standby"
-    }
+        "webinar",
+        "standby",
+        "automation standby",
+        "automation overtime",
+        "six months goals"
+    ]
 
     matches = list(header_pat.finditer(t))
     if not matches:
@@ -55,14 +57,15 @@ def cut_intro_sections(text: str) -> str:
 
     out_parts = []
     for i, m in enumerate(matches):
-        # normalize header to remove punctuation and lowercase
-        title = re.sub(r"[^a-z0-9]+", " ", m.group(1).strip().lower()).strip()
+        # normalize header
+        title_norm = re.sub(r"[^a-z0-9]+", " ", m.group(1).strip().lower()).strip()
         block_start = m.start()
         block_end = matches[i + 1].start() if i + 1 < len(matches) else len(t)
 
         block = t[block_start:block_end]
-        if title in unwanted:
-            continue  # skip block
+        # skip if header matches any unwanted keyword
+        if any(kw in title_norm for kw in unwanted_keywords):
+            continue
         out_parts.append(block)
 
     cleaned = "".join(out_parts).lstrip()
@@ -70,8 +73,8 @@ def cut_intro_sections(text: str) -> str:
 
 
 def cut_off_after_standby(markdown_text: str) -> str:
-    """Remove everything from the Standby section onward (any formatting)."""
-    cutoff_pat = re.compile(r"\*\*\s*standby\s*:?[\s*]*", re.IGNORECASE)
+    """Remove everything from Standby section onward (Automation Standby, Standby, etc)."""
+    cutoff_pat = re.compile(r"\*\*\s*(automation\s+)?standby\s*:?[\s*]*", re.IGNORECASE)
     m = cutoff_pat.search(markdown_text)
     if m:
         return markdown_text[:m.start()].rstrip()
@@ -79,8 +82,8 @@ def cut_off_after_standby(markdown_text: str) -> str:
 
 
 def split_into_chunks(markdown_text: str):
-    """Split into chunks by bold headers like **Header:**"""
-    parts = re.split(r"(?=\*\*[^*]+:\*\*)", markdown_text)
+    """Split into chunks by bold headers (colon optional)."""
+    parts = re.split(r"(?=\*\*[^*]+?\*\*)", markdown_text)
     return [p.strip() for p in parts if p.strip()]
 
 
